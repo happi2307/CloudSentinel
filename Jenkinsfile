@@ -51,8 +51,12 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                sshagent(credentials: ['ec2-ssh']) {
-                    bat 'ssh -o StrictHostKeyChecking=no %EC2_USER%@%EC2_IP% "docker pull %DOCKER_IMAGE% && (docker stop %CONTAINER_NAME% || true) && (docker rm %CONTAINER_NAME% || true) && docker run -d --name %CONTAINER_NAME% -p 8080:8080 %DOCKER_IMAGE%"'
+                withCredentials([sshUserPrivateKey(
+                    credentialsId: 'ec2-ssh',
+                    keyFileVariable: 'SSH_KEY',
+                    usernameVariable: 'SSH_USER'
+                )]) {
+                    bat 'ssh -i "%SSH_KEY%" -o StrictHostKeyChecking=no %SSH_USER%@%EC2_IP% "docker pull %DOCKER_IMAGE% && (docker stop %CONTAINER_NAME% || true) && (docker rm %CONTAINER_NAME% || true) && docker run -d --name %CONTAINER_NAME% -p 8080:8080 %DOCKER_IMAGE%"'
                 }
             }
         }
