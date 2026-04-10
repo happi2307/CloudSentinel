@@ -1,10 +1,12 @@
 const express = require("express");
+
 const app = express();
+const port = process.env.PORT || 8080;
 
 app.get("/", (req, res) => {
-  res.send("DevSecOps Project Running succesfully🚀");
+  res.send("CloudSentinel DevSecOps pipeline is running successfully.");
 });
 
-app.listen(8080, () => {
-  console.log("Server running on port 8080");
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });

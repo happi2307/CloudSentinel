@@ -3,14 +3,21 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = "happi2307/devsecops-app"
+        CONTAINER_NAME = "cloudsentinel-app"
         EC2_IP = "65.2.181.27"
+        EC2_USER = "ubuntu"
     }
 
     stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
 
         stage('Security Scan') {
             steps {
-                bat 'echo Running Checkov scan...'
+                bat 'echo Running Checkov scan... && checkov -d .'
             }
         }
 
@@ -29,18 +36,16 @@ pipeline {
         }
 
         stage('Docker Login') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-creds',
-            usernameVariable: 'USER',
-            passwordVariable: 'PASS'
-        )]) {
-            bat """
-            docker login -u %USER% -p %PASS%
-            """
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-creds',
+                    usernameVariable: 'USER',
+                    passwordVariable: 'PASS'
+                )]) {
+                    bat 'echo %PASS% | docker login -u %USER% --password-stdin'
+                }
+            }
         }
-    }
-}
 
         stage('Docker Push') {
             steps {
@@ -50,10 +55,9 @@ pipeline {
 
         stage('Deploy to EC2') {
             steps {
-                bat '''
-                ssh -i C:\\Users\\Akshat\\Downloads\\CloudSentinel\\devsecops-key.pem -o StrictHostKeyChecking=no ubuntu@%EC2_IP% ^
-                "docker pull %DOCKER_IMAGE% && docker stop $(docker ps -q) || true && docker run -d -p 8080:8080 %DOCKER_IMAGE%"
-                '''
+                sshagent(credentials: ['ec2-ssh']) {
+                    bat 'ssh -o StrictHostKeyChecking=no %EC2_USER%@%EC2_IP% "docker pull %DOCKER_IMAGE% && (docker stop %CONTAINER_NAME% || true) && (docker rm %CONTAINER_NAME% || true) && docker run -d --name %CONTAINER_NAME% -p 8080:8080 %DOCKER_IMAGE%"'
+                }
             }
         }
     }
