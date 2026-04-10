@@ -1,0 +1,34 @@
+# Node modules
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment variables
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build files
+dist/
+build/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Jenkins
+*.jenkins
+
+# Docker
+*.tar
+
+# IDE files
+.idea/
+.vscode/
+*.iml
