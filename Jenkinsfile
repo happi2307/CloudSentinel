@@ -29,16 +29,18 @@ pipeline {
         }
 
         stage('Docker Login') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-creds',
-                    usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
-                )]) {
-                    bat 'docker login -u %USER% -p %PASS%'
-                }
-            }
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-creds',
+            usernameVariable: 'USER',
+            passwordVariable: 'PASS'
+        )]) {
+            bat """
+            docker login -u %USER% -p %PASS%
+            """
         }
+    }
+}
 
         stage('Docker Push') {
             steps {
