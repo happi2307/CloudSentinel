@@ -56,6 +56,7 @@ pipeline {
                     keyFileVariable: 'SSH_KEY',
                     usernameVariable: 'SSH_USER'
                 )]) {
+                    bat 'icacls "%SSH_KEY%" /inheritance:r /grant:r "%USERNAME%:R"'
                     bat 'ssh -i "%SSH_KEY%" -o StrictHostKeyChecking=no %SSH_USER%@%EC2_IP% "docker pull %DOCKER_IMAGE% && (docker stop %CONTAINER_NAME% || true) && (docker rm %CONTAINER_NAME% || true) && docker run -d --name %CONTAINER_NAME% -p 8080:8080 %DOCKER_IMAGE%"'
                 }
             }
