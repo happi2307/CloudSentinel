@@ -61,7 +61,17 @@ pipeline {
                     $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
                     icacls $keyPath /inheritance:r | Out-Null
                     icacls $keyPath /grant:r "${currentUser}:R" | Out-Null
-                    ssh -i $keyPath -o StrictHostKeyChecking=no "$($env:SSH_USER)@$($env:EC2_IP)" "docker pull $($env:DOCKER_IMAGE) && (docker stop $($env:CONTAINER_NAME) || true) && (docker rm $($env:CONTAINER_NAME) || true) && docker run -d --name $($env:CONTAINER_NAME) -p 8080:8080 $($env:DOCKER_IMAGE)"
+                    $remoteCommand = @'
+                    docker pull __DOCKER_IMAGE__ &&
+                    docker rm -f __CONTAINER_NAME__ >/dev/null 2>&1 || true
+                    existing_ids=$(docker ps -aq --filter "publish=8080")
+                    if [ -n "$existing_ids" ]; then
+                      docker rm -f $existing_ids
+                    fi
+                    docker run -d --name __CONTAINER_NAME__ -p 8080:8080 __DOCKER_IMAGE__
+'@
+                    $remoteCommand = $remoteCommand.Replace('__DOCKER_IMAGE__', $env:DOCKER_IMAGE).Replace('__CONTAINER_NAME__', $env:CONTAINER_NAME)
+                    ssh -i $keyPath -o StrictHostKeyChecking=no "$($env:SSH_USER)@$($env:EC2_IP)" "sh -lc '$remoteCommand'"
                     '''
                 }
             }
