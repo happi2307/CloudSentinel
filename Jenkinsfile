@@ -39,24 +39,13 @@ pipeline {
             }
         }
 
-        stage('Docker Login') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-creds',
-                    usernameVariable: 'USER',
-                    passwordVariable: 'PASS'
-                )]) {
-                    powershell '''
-                    $password = $env:PASS
-                    $password | docker login -u $env:USER --password-stdin
-                    '''
-                }
-            }
-        }
-
         stage('Docker Push') {
             steps {
-                bat 'docker push %DOCKER_IMAGE%'
+                script {
+                    docker.withRegistry('https://index.docker.io/v1/', 'docker-creds') {
+                        bat 'docker push %DOCKER_IMAGE%'
+                    }
+                }
             }
         }
 
