@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)
+    }
+
     environment {
         DOCKER_IMAGE = "happi2307/devsecops-app"
         CONTAINER_NAME = "cloudsentinel-app"
@@ -17,7 +21,7 @@ pipeline {
 
         stage('Security Scan') {
             steps {
-                bat 'echo Running Checkov scan... && checkov -d .'
+                bat 'echo Running Checkov scan... && docker run --rm -v "%WORKSPACE%:/repo" bridgecrew/checkov:latest -d /repo'
             }
         }
 
