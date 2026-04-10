@@ -8,11 +8,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
-            steps {
-                git 'https://github.com/happi2307/CloudSentinel.git'
-            }
-        }
+        
 
         stage('Security Scan') {
             steps {
