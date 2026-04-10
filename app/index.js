@@ -4,7 +4,7 @@ const app = express();
 const port = process.env.PORT || 8080;
 
 app.get("/", (req, res) => {
-  res.send("CloudSentinel DevSecOps pipeline is running successfully.");
+  res.send("CloudSentinel DevSecOps pipeline is running successfully yippieeeeeeee.");
 });
 
 app.listen(port, () => {
