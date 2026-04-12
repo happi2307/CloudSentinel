@@ -8,7 +8,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = "happi2307/devsecops-app"
         CONTAINER_NAME = "cloudsentinel-app"
-        EC2_IP = "65.2.181.27"
+        EC2_IP = "43.205.130.141"
         EC2_USER = "ubuntu"
     }
 
@@ -59,11 +59,11 @@ pipeline {
                 withCredentials([sshUserPrivateKey(
                     credentialsId: 'ec2-ssh',
                     keyFileVariable: 'SSH_KEY',
-                    usernameVariable: 'SSH_USER'
+                    usernameVariable: 'CRED_SSH_USER'
                 )]) {
                     sh '''
                     chmod 600 "$SSH_KEY"
-                    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$SSH_USER@$EC2_IP" '
+                    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_USER@$EC2_IP" '
                       docker pull '"$DOCKER_IMAGE"' &&
                       docker rm -f '"$CONTAINER_NAME"' >/dev/null 2>&1 || true
                       existing_ids=$(docker ps -aq --filter "publish=8080")
