@@ -28,7 +28,7 @@ pipeline {
         stage('Build App') {
             steps {
                 dir('app') {
-                    sh 'npm install'
+                    sh 'docker run --rm -v "$PWD:/app" -w /app node:18 npm install'
                 }
             }
         }
