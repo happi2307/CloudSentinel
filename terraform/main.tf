@@ -31,7 +31,13 @@ variable "key_pair_name" {
 }
 
 variable "allowed_ssh_cidr" {
-  description = "CIDR block allowed to SSH into the Jenkins host."
+  description = "CIDR block allowed to SSH into the Jenkins host. Restrict this to trusted admin IPs."
+  type        = string
+  default     = "10.0.0.0/32"
+}
+
+variable "allowed_jenkins_cidr" {
+  description = "CIDR block allowed to access the Jenkins UI."
   type        = string
   default     = "0.0.0.0/0"
 }
@@ -74,13 +80,17 @@ data "aws_ami" "ubuntu" {
   }
 }
 
+data "aws_iam_policy" "ssm_managed_instance_core" {
+  arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_security_group" "jenkins" {
   name        = "cloudsentinel-jenkins-sg"
   description = "Security group for Jenkins controller access"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
-    description = "SSH"
+    description = "SSH from trusted admin network"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
@@ -88,17 +98,42 @@ resource "aws_security_group" "jenkins" {
   }
 
   ingress {
-    description = "Jenkins UI"
+    description = "Jenkins UI access"
     from_port   = var.jenkins_port
     to_port     = var.jenkins_port
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_jenkins_cidr]
+  }
+
+  egress {
+    description = "HTTPS outbound"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
+    description = "HTTP outbound"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "DNS TCP outbound"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "DNS UDP outbound"
+    from_port   = 53
+    to_port     = 53
+    protocol    = "udp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -107,18 +142,55 @@ resource "aws_security_group" "jenkins" {
   }
 }
 
+resource "aws_iam_role" "jenkins" {
+  name = "cloudsentinel-jenkins-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ssm_core" {
+  role       = aws_iam_role.jenkins.name
+  policy_arn = data.aws_iam_policy.ssm_managed_instance_core.arn
+}
+
+resource "aws_iam_instance_profile" "jenkins" {
+  name = "cloudsentinel-jenkins-instance-profile"
+  role = aws_iam_role.jenkins.name
+}
+
 resource "aws_instance" "jenkins" {
-  ami                         = data.aws_ami.ubuntu.id
-  instance_type               = var.instance_type
-  key_name                    = var.key_pair_name
-  subnet_id                   = data.aws_subnets.default.ids[0]
-  vpc_security_group_ids      = [aws_security_group.jenkins.id]
-  associate_public_ip_address = true
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = var.instance_type
+  key_name               = var.key_pair_name
+  subnet_id              = data.aws_subnets.default.ids[0]
+  vpc_security_group_ids = [aws_security_group.jenkins.id]
+
+  associate_public_ip_address = false
+  ebs_optimized               = true
+  monitoring                  = true
+  iam_instance_profile        = aws_iam_instance_profile.jenkins.name
+
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
 
   root_block_device {
     volume_size           = var.root_volume_size
     volume_type           = "gp3"
     delete_on_termination = true
+    encrypted             = true
   }
 
   user_data = <<-EOF
@@ -126,10 +198,10 @@ resource "aws_instance" "jenkins" {
               set -eux
 
               apt-get update
-              apt-get install -y fontconfig openjdk-17-jre docker.io curl gnupg ca-certificates
+              apt-get install -y fontconfig openjdk-21-jre docker.io curl ca-certificates
 
               install -m 0755 -d /etc/apt/keyrings
-              curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2023.key | tee /etc/apt/keyrings/jenkins-keyring.asc >/dev/null
+              curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key | tee /etc/apt/keyrings/jenkins-keyring.asc >/dev/null
               echo "deb [signed-by=/etc/apt/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/" > /etc/apt/sources.list.d/jenkins.list
 
               apt-get update
@@ -150,12 +222,25 @@ resource "aws_instance" "jenkins" {
   }
 }
 
+resource "aws_eip" "jenkins" {
+  domain = "vpc"
+
+  tags = {
+    Name = "cloudsentinel-jenkins-eip"
+  }
+}
+
+resource "aws_eip_association" "jenkins" {
+  instance_id   = aws_instance.jenkins.id
+  allocation_id = aws_eip.jenkins.id
+}
+
 output "jenkins_public_ip" {
   description = "Public IP of the Jenkins EC2 instance."
-  value       = aws_instance.jenkins.public_ip
+  value       = aws_eip.jenkins.public_ip
 }
 
 output "jenkins_url" {
   description = "Jenkins UI URL."
-  value       = "http://${aws_instance.jenkins.public_ip}:${var.jenkins_port}"
+  value       = "http://${aws_eip.jenkins.public_ip}:${var.jenkins_port}"
 }
