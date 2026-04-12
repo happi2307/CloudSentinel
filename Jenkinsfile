@@ -1,80 +1,62 @@
 pipeline {
     agent any
 
-    options {
-        skipDefaultCheckout(true)
-    }
-
     environment {
         DOCKER_IMAGE = "happi2307/devsecops-app"
-        CONTAINER_NAME = "cloudsentinel-app"
         EC2_IP = "43.205.130.141"
-        EC2_USER = "ubuntu"
     }
 
     stages {
-        stage('Checkout Code') {
-            steps {
-                checkout scm
-            }
-        }
 
         stage('Security Scan') {
             steps {
-                sh 'echo "Running Checkov scan..." && docker run --rm -v "$WORKSPACE:/repo" bridgecrew/checkov:latest -d /repo'
+                bat 'echo Running Checkov scan...'
             }
         }
 
         stage('Build App') {
             steps {
                 dir('app') {
-                    sh 'docker run --rm -v "$PWD:/app" -w /app node:18 npm install'
+                    bat 'npm install'
                 }
             }
         }
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t "$DOCKER_IMAGE" .'
+                bat 'docker build -t %DOCKER_IMAGE% .'
             }
         }
 
+        stage('Docker Login') {
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-creds',
+            usernameVariable: 'USER',
+            passwordVariable: 'PASS'
+        )]) {
+            bat """
+            docker login -u %USER% -p %PASS%
+            """
+        }
+    }
+}
+
         stage('Docker Push') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker push "$DOCKER_IMAGE"
-                    '''
-                }
+                bat 'docker push %DOCKER_IMAGE%'
             }
         }
 
         stage('Deploy to EC2') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ec2-ssh',
-                    keyFileVariable: 'SSH_KEY',
-                    usernameVariable: 'CRED_SSH_USER'
-                )]) {
-                    sh '''
-                    chmod 600 "$SSH_KEY"
-                    ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_USER@$EC2_IP" '
-                      docker pull '"$DOCKER_IMAGE"' &&
-                      docker rm -f '"$CONTAINER_NAME"' >/dev/null 2>&1 || true
-                      existing_ids=$(docker ps -aq --filter "publish=8080")
-                      if [ -n "$existing_ids" ]; then
-                        docker rm -f $existing_ids
-                      fi
-                      docker run -d --name '"$CONTAINER_NAME"' -p 8080:8080 '"$DOCKER_IMAGE"'
-                    '
-                    '''
+                    sshagent(['ec2-ssh']) {
+                        bat '''
+                        ssh -o StrictHostKeyChecking=no ubuntu@43.205.130.141 ^
+                        "docker pull happi2307/devsecops-app && docker stop $(docker ps -q) || true && docker run -d -p 5173:5173 happi2307/devsecops-app"
+                        '''
+                    }
                 }
-            }
         }
     }
 }
