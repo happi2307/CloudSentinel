@@ -36,3 +36,4 @@ build/
 # ssh key
 .pem
 devsecops-key.pem
+cloudsentinel.pem

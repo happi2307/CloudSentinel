@@ -78,6 +78,11 @@ CloudSentinel/
    - Checkov
    - OpenSSH client
 
+### Jenkins on EC2
+- The Terraform file in [`terraform/main.tf`](/c:/Users/Akshat/Downloads/CloudSentinel/terraform/main.tf#L1) now provisions a Jenkins-ready Ubuntu EC2 instance with Docker, Java 17, and Jenkins installed automatically.
+- The default instance type is `t3.large`, which is a more practical baseline for a small shared Jenkins controller than lightweight burstable instances.
+- If you host Jenkins and the application on the same EC2 machine, do not leave both on port `8080`. Jenkins uses `8080` by default, so the application should move to another port or sit behind a reverse proxy.
+
 ### How to Use
 1. Make changes inside `app/`.
 2. Commit and push to `main`.
