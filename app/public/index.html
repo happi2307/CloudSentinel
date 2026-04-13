@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CloudSentinel Demo</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid"></div>
+    <main class="container">
+      <header class="hero">
+        <p class="kicker">DevSecOps Showcase</p>
+        <h1>CloudSentinel</h1>
+        <p id="tagline" class="subtitle">Loading project details...</p>
+        <div class="hero-actions">
+          <button id="runPipelineBtn" class="btn-primary" type="button">Run Demo Pipeline</button>
+          <span id="pipelineStatus" class="status-pill">Idle</span>
+        </div>
+      </header>
+
+      <section class="panel" aria-labelledby="stackTitle">
+        <div class="panel-head">
+          <h2 id="stackTitle">Stack</h2>
+          <span class="mono">/api/project</span>
+        </div>
+        <div id="stackList" class="chip-wrap"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="pipelineTitle">
+        <div class="panel-head">
+          <h2 id="pipelineTitle">Pipeline Timeline</h2>
+          <span id="progressLabel" class="mono">0%</span>
+        </div>
+        <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div id="progressBar" class="progress-fill"></div>
+        </div>
+        <div id="timeline" class="timeline"></div>
+      </section>
+
+      <section class="grid-2">
+        <article class="panel" aria-labelledby="securityTitle">
+          <div class="panel-head">
+            <h2 id="securityTitle">Security Scan</h2>
+            <span class="mono">Checkov</span>
+          </div>
+          <div id="scanSummary" class="metric-row"></div>
+          <ul id="findingList" class="list"></ul>
+        </article>
+
+        <article class="panel" aria-labelledby="iacTitle">
+          <div class="panel-head">
+            <h2 id="iacTitle">Terraform + Deployment</h2>
+            <span class="mono">IaC</span>
+          </div>
+          <ul id="infraList" class="list"></ul>
+          <div id="architectureList" class="keyvals"></div>
+        </article>
+      </section>
+    </main>
+
+    <script src="/main.js"></script>
+  </body>
+</html>
