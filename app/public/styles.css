@@ -124,6 +124,18 @@ h2 {
   background: var(--accent-soft);
 }
 
+.status-pill.failed {
+  border-color: #d59898;
+  color: #8f2f2f;
+  background: #fff1f1;
+}
+
+.status-pill.aborted {
+  border-color: #c9b685;
+  color: #775810;
+  background: #fff8e4;
+}
+
 .panel-head {
   display: flex;
   justify-content: space-between;
@@ -193,6 +205,69 @@ h2 {
 
 .timeline-item.pending {
   opacity: 0.82;
+}
+
+.timeline-item.failed {
+  border-color: #d59898;
+  background: #fff3f3;
+}
+
+.timeline-item.aborted {
+  border-color: #d8c48f;
+  background: #fff9ed;
+}
+
+.history-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.history-item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.history-item.running {
+  border-color: #efbb81;
+  background: #fff8f0;
+}
+
+.history-item.success {
+  border-color: #8fd3af;
+  background: #f5fff9;
+}
+
+.history-item.failed {
+  border-color: #d59898;
+  background: #fff3f3;
+}
+
+.history-item.aborted {
+  border-color: #d8c48f;
+  background: #fff9ed;
+}
+
+.history-meta {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.history-meta a {
+  color: #0b7f58;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.history-status {
+  font-size: 0.8rem;
+  font-family: "IBM Plex Mono", monospace;
+  color: var(--muted);
 }
 
 .list {

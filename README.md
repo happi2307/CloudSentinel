@@ -90,6 +90,36 @@ CloudSentinel/
 4. Monitor Jenkins console logs for each stage.
 5. Access the deployed app at `http://<EC2-PUBLIC-IP>:8080`.
 
+### Dashboard with Real Jenkins Data
+The web dashboard can now show live Jenkins data (latest stage timeline + real build history) and trigger actual builds through Jenkins API.
+
+1. Create Jenkins API token
+   - Open Jenkins > your user > Configure > API Token
+   - Generate a token and copy it once
+
+2. Configure app environment
+   - Copy `app/.env.example` values into your runtime environment
+   - Required variables:
+     - `JENKINS_BASE_URL` (example: `http://43.205.130.141:8080`)
+     - `JENKINS_JOB_NAME` (job name or folder path like `team/cloudsentinel-pipeline`)
+     - `JENKINS_USERNAME`
+     - `JENKINS_API_TOKEN`
+
+3. Start the app from repository root
+
+   ```bash
+   node app/index.js
+   ```
+
+4. Open dashboard
+   - `http://127.0.0.1:8081`
+   - Use **Trigger Jenkins Build** to start an actual Jenkins run
+   - Build history and latest pipeline stages are fetched live from Jenkins
+
+Notes:
+- If Jenkins is not configured, the dashboard shows a configuration message.
+- Stage breakdown uses Jenkins Pipeline `wfapi` endpoint when available.
+
 ### Best Practices
 - Do not commit `.pem` files or other secrets
 - Do not hardcode credentials in the repository

@@ -1,5 +1,6 @@
 const express = require("express");
 const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 
 const app = express();
 const port = process.env.PORT || 8081;
@@ -66,81 +67,241 @@ const projectSnapshot = {
   ],
 };
 
-const buildLiveRun = () => ({
-  id: `run-${Date.now()}`,
-  startedAt: new Date().toISOString(),
-  status: "running",
-  progress: 0,
-  stages: stageTemplates.map((stage) => ({
-    ...stage,
-    status: "pending",
-    durationMs: null,
-    updatedAt: null,
-  })),
-});
+const jenkinsConfig = {
+  baseUrl: process.env.JENKINS_BASE_URL || "",
+  jobName: process.env.JENKINS_JOB_NAME || "",
+  username: process.env.JENKINS_USERNAME || "",
+  apiToken: process.env.JENKINS_API_TOKEN || "",
+  historyLimit: Number(process.env.JENKINS_HISTORY_LIMIT || 8),
+};
 
-let currentRun = null;
-let runTimer = null;
+const isJenkinsConfigured = () => Boolean(jenkinsConfig.baseUrl && jenkinsConfig.jobName);
 
-const serializeRun = () => {
-  if (!currentRun) {
+const buildJenkinsAuthHeader = () => {
+  if (!jenkinsConfig.username || !jenkinsConfig.apiToken) {
     return null;
   }
 
+  const encoded = Buffer.from(`${jenkinsConfig.username}:${jenkinsConfig.apiToken}`).toString("base64");
+  return `Basic ${encoded}`;
+};
+
+const formatJenkinsJobPath = () => {
+  const segments = jenkinsConfig.jobName
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment) => `job/${encodeURIComponent(segment)}`);
+
+  return `/${segments.join("/")}`;
+};
+
+const buildJenkinsUrl = (routePath) => {
+  const normalizedBase = jenkinsConfig.baseUrl.replace(/\/+$/, "");
+  return `${normalizedBase}${routePath}`;
+};
+
+const parseJsonSafe = async (response) => {
+  const bodyText = await response.text();
+  if (!bodyText) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(bodyText);
+  } catch (error) {
+    return null;
+  }
+};
+
+const requestJenkins = async (routePath, options = {}) => {
+  const authHeader = buildJenkinsAuthHeader();
+  const headers = {
+    Accept: "application/json",
+    ...(options.headers || {}),
+  };
+
+  if (authHeader) {
+    headers.Authorization = authHeader;
+  }
+
+  const response = await fetch(buildJenkinsUrl(routePath), {
+    method: options.method || "GET",
+    headers,
+    body: options.body,
+  });
+
+  if (!response.ok) {
+    const bodyText = await response.text();
+    const trimmed = bodyText.length > 240 ? `${bodyText.slice(0, 240)}...` : bodyText;
+    const details = trimmed || response.statusText;
+    throw new Error(`Jenkins request failed (${response.status}): ${details}`);
+  }
+
   return {
-    ...currentRun,
-    stages: currentRun.stages.map((stage) => ({ ...stage })),
+    response,
+    data: await parseJsonSafe(response),
   };
 };
 
-const completeRunStep = () => {
-  if (!currentRun || currentRun.status !== "running") {
-    return;
+const normalizeBuildStatus = (result, building) => {
+  if (building) {
+    return "running";
   }
 
-  const runningIndex = currentRun.stages.findIndex((stage) => stage.status === "running");
-
-  if (runningIndex >= 0) {
-    currentRun.stages[runningIndex].status = "success";
-    currentRun.stages[runningIndex].durationMs = 800 + Math.floor(Math.random() * 1200);
-    currentRun.stages[runningIndex].updatedAt = new Date().toISOString();
+  if (!result) {
+    return "unknown";
   }
 
-  const nextStage = currentRun.stages.find((stage) => stage.status === "pending");
-
-  if (nextStage) {
-    nextStage.status = "running";
-    nextStage.updatedAt = new Date().toISOString();
-    const completedStages = currentRun.stages.filter((stage) => stage.status === "success").length;
-    currentRun.progress = Math.round((completedStages / currentRun.stages.length) * 100);
-    return;
+  const normalized = String(result).toUpperCase();
+  if (normalized === "SUCCESS") {
+    return "success";
+  }
+  if (normalized === "FAILURE") {
+    return "failed";
+  }
+  if (normalized === "ABORTED") {
+    return "aborted";
   }
 
-  currentRun.status = "success";
-  currentRun.progress = 100;
-  currentRun.completedAt = new Date().toISOString();
+  return "unknown";
+};
 
-  if (runTimer) {
-    clearInterval(runTimer);
-    runTimer = null;
+const normalizeStageStatus = (status) => {
+  const normalized = String(status || "").toUpperCase();
+
+  if (["SUCCESS", "PASSED"].includes(normalized)) {
+    return "success";
+  }
+  if (["IN_PROGRESS", "PAUSED_PENDING", "RUNNING"].includes(normalized)) {
+    return "running";
+  }
+  if (["FAILED", "FAILURE", "ERROR"].includes(normalized)) {
+    return "failed";
+  }
+  if (["ABORTED", "NOT_EXECUTED", "SKIPPED"].includes(normalized)) {
+    return "aborted";
+  }
+
+  return "pending";
+};
+
+const inferProgress = (stages) => {
+  if (!stages.length) {
+    return 0;
+  }
+
+  const doneCount = stages.filter((stage) => ["success", "failed", "aborted"].includes(stage.status)).length;
+  return Math.round((doneCount / stages.length) * 100);
+};
+
+const fetchPipelineStageData = async (buildNumber) => {
+  try {
+    const wfApiPath = `${formatJenkinsJobPath()}/${buildNumber}/wfapi/describe`;
+    const { data } = await requestJenkins(wfApiPath);
+    if (!data || !Array.isArray(data.stages)) {
+      return stageTemplates.map((stage) => ({ ...stage, status: "pending", durationMs: null }));
+    }
+
+    return data.stages.map((stage) => ({
+      name: stage.name,
+      description: `Jenkins stage status: ${String(stage.status || "UNKNOWN").toUpperCase()}`,
+      status: normalizeStageStatus(stage.status),
+      durationMs: typeof stage.durationMillis === "number" ? stage.durationMillis : null,
+    }));
+  } catch (error) {
+    return stageTemplates.map((stage) => ({ ...stage, status: "pending", durationMs: null }));
   }
 };
 
-const startRun = () => {
-  if (currentRun && currentRun.status === "running") {
-    return currentRun;
+const fetchJenkinsSnapshot = async () => {
+  if (!isJenkinsConfigured()) {
+    return {
+      configured: false,
+      message: "Set JENKINS_BASE_URL and JENKINS_JOB_NAME to enable live pipeline data.",
+      history: [],
+      currentRun: null,
+      stages: stageTemplates,
+    };
   }
 
-  currentRun = buildLiveRun();
-  currentRun.stages[0].status = "running";
-  currentRun.stages[0].updatedAt = new Date().toISOString();
+  const tree = "builds[number,url,result,timestamp,duration,building,displayName,id]";
+  const routePath = `${formatJenkinsJobPath()}/api/json?tree=${encodeURIComponent(tree)}`;
+  const { data } = await requestJenkins(routePath);
+  const builds = Array.isArray(data?.builds) ? data.builds.slice(0, jenkinsConfig.historyLimit) : [];
 
-  if (runTimer) {
-    clearInterval(runTimer);
+  const history = builds.map((build) => ({
+    number: build.number,
+    displayName: build.displayName || `#${build.number}`,
+    result: build.result,
+    status: normalizeBuildStatus(build.result, build.building),
+    building: Boolean(build.building),
+    timestamp: build.timestamp,
+    durationMs: build.duration,
+    url: build.url,
+  }));
+
+  const latestBuild = history[0] || null;
+  const stages = latestBuild ? await fetchPipelineStageData(latestBuild.number) : stageTemplates;
+  const currentRun = latestBuild
+    ? {
+        id: `jenkins-${latestBuild.number}`,
+        buildNumber: latestBuild.number,
+        status: latestBuild.status,
+        progress: inferProgress(stages),
+        startedAt: latestBuild.timestamp ? new Date(latestBuild.timestamp).toISOString() : null,
+        completedAt:
+          latestBuild.durationMs && latestBuild.timestamp
+            ? new Date(latestBuild.timestamp + latestBuild.durationMs).toISOString()
+            : null,
+        durationMs: latestBuild.durationMs,
+        stages,
+        url: latestBuild.url,
+      }
+    : null;
+
+  return {
+    configured: true,
+    message: "Live Jenkins data loaded.",
+    history,
+    currentRun,
+    stages,
+  };
+};
+
+const fetchJenkinsCrumb = async () => {
+  try {
+    const { data } = await requestJenkins("/crumbIssuer/api/json");
+    if (!data?.crumb || !data?.crumbRequestField) {
+      return null;
+    }
+
+    return data;
+  } catch (error) {
+    return null;
+  }
+};
+
+const triggerJenkinsBuild = async () => {
+  if (!isJenkinsConfigured()) {
+    throw new Error("Jenkins is not configured.");
   }
 
-  runTimer = setInterval(completeRunStep, 2200);
-  return currentRun;
+  const crumbData = await fetchJenkinsCrumb();
+  const headers = {};
+  if (crumbData) {
+    headers[crumbData.crumbRequestField] = crumbData.crumb;
+  }
+
+  const triggerPath = `${formatJenkinsJobPath()}/build`;
+  const { response } = await requestJenkins(triggerPath, {
+    method: "POST",
+    headers,
+  });
+
+  return {
+    queueLocation: response.headers.get("location"),
+  };
 };
 
 app.get("/api/health", (req, res) => {
@@ -155,29 +316,66 @@ app.get("/api/project", (req, res) => {
   res.json(projectSnapshot);
 });
 
-app.get("/api/pipeline", (req, res) => {
-  res.json({
-    stages: stageTemplates,
-    currentRun: serializeRun(),
-  });
-});
-
-app.post("/api/pipeline/run", (req, res) => {
-  const run = startRun();
-  res.status(202).json({
-    message: "Pipeline simulation started.",
-    run,
-  });
-});
-
-app.get("/api/demo", (req, res) => {
-  res.json({
-    ...projectSnapshot,
-    pipeline: {
+app.get("/api/pipeline", async (req, res) => {
+  try {
+    const snapshot = await fetchJenkinsSnapshot();
+    res.json(snapshot);
+  } catch (error) {
+    res.status(502).json({
+      configured: isJenkinsConfigured(),
+      message: error.message,
+      history: [],
+      currentRun: null,
       stages: stageTemplates,
-      currentRun: serializeRun(),
-    },
-  });
+    });
+  }
+});
+
+app.post("/api/pipeline/run", async (req, res) => {
+  try {
+    const triggerData = await triggerJenkinsBuild();
+    res.status(202).json({
+      message: "Jenkins build triggered.",
+      queueLocation: triggerData.queueLocation,
+    });
+  } catch (error) {
+    res.status(502).json({
+      message: error.message,
+    });
+  }
+});
+
+app.get("/api/demo", async (req, res) => {
+  try {
+    const snapshot = await fetchJenkinsSnapshot();
+    res.json({
+      ...projectSnapshot,
+      jenkins: {
+        configured: snapshot.configured,
+        baseUrl: jenkinsConfig.baseUrl || null,
+        jobName: jenkinsConfig.jobName || null,
+        message: snapshot.message,
+      },
+      pipeline: snapshot,
+    });
+  } catch (error) {
+    res.status(502).json({
+      ...projectSnapshot,
+      jenkins: {
+        configured: isJenkinsConfigured(),
+        baseUrl: jenkinsConfig.baseUrl || null,
+        jobName: jenkinsConfig.jobName || null,
+        message: error.message,
+      },
+      pipeline: {
+        configured: isJenkinsConfigured(),
+        message: error.message,
+        history: [],
+        currentRun: null,
+        stages: stageTemplates,
+      },
+    });
+  }
 });
 
 app.listen(port, () => {

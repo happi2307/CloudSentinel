@@ -20,9 +20,10 @@
         <h1>CloudSentinel</h1>
         <p id="tagline" class="subtitle">Loading project details...</p>
         <div class="hero-actions">
-          <button id="runPipelineBtn" class="btn-primary" type="button">Run Demo Pipeline</button>
+          <button id="runPipelineBtn" class="btn-primary" type="button">Trigger Jenkins Build</button>
           <span id="pipelineStatus" class="status-pill">Idle</span>
         </div>
+        <p id="jenkinsMeta" class="subtitle mono">Jenkins connection: checking...</p>
       </header>
 
       <section class="panel" aria-labelledby="stackTitle">
@@ -35,13 +36,21 @@
 
       <section class="panel" aria-labelledby="pipelineTitle">
         <div class="panel-head">
-          <h2 id="pipelineTitle">Pipeline Timeline</h2>
+          <h2 id="pipelineTitle">Latest Jenkins Pipeline</h2>
           <span id="progressLabel" class="mono">0%</span>
         </div>
         <div class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
           <div id="progressBar" class="progress-fill"></div>
         </div>
         <div id="timeline" class="timeline"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="historyTitle">
+        <div class="panel-head">
+          <h2 id="historyTitle">Build History</h2>
+          <span class="mono">Recent Jenkins runs</span>
+        </div>
+        <div id="buildHistory" class="history-list"></div>
       </section>
 
       <section class="grid-2">
