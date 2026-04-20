@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         DOCKER_IMAGE = 'happi2307/devsecops-app'
-        EC2_IP = '43.205.130.141'
+        EC2_IP = '13.206.102.28'
         EC2_USER = 'ubuntu'
         APP_PORT = '8081'
     }
