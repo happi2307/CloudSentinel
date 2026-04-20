@@ -37,3 +37,4 @@ build/
 .pem
 devsecops-key.pem
 cloudsentinel.pem
+cloud.pem
