@@ -1,0 +1,68 @@
+---
+- name: Configure Jenkins controller
+  hosts: jenkins
+  become: true
+
+  tasks:
+    - name: Refresh apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install Jenkins prerequisites
+      ansible.builtin.apt:
+        name: "{{ jenkins_packages }}"
+        state: present
+
+    - name: Ensure apt keyring directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Install Jenkins repository key
+      ansible.builtin.get_url:
+        url: "{{ jenkins_repo_key_url }}"
+        dest: /etc/apt/keyrings/jenkins-keyring.asc
+        mode: "0644"
+
+    - name: Configure Jenkins apt repository
+      ansible.builtin.apt_repository:
+        repo: "{{ jenkins_repo }}"
+        filename: jenkins
+        state: present
+        update_cache: true
+
+    - name: Install Jenkins
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+
+    - name: Add ubuntu user to docker group
+      ansible.builtin.user:
+        name: ubuntu
+        groups: docker
+        append: true
+
+    - name: Add jenkins user to docker group
+      ansible.builtin.user:
+        name: jenkins
+        groups: docker
+        append: true
+
+    - name: Enable and start Docker
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Enable and start Jenkins
+      ansible.builtin.service:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: Restart Jenkins after docker group change
+      ansible.builtin.service:
+        name: jenkins
+        state: restarted

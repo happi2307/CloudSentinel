@@ -1,103 +1,123 @@
-## CloudSentinel - DevSecOps CI/CD Pipeline
+# CloudSentinel - DevSecOps CI/CD Pipeline
 
-### Overview
-CloudSentinel is an end-to-end DevSecOps CI/CD pipeline project that automates building, scanning, containerizing, and deploying a Node.js application to AWS EC2 using Jenkins.
+CloudSentinel demonstrates a practical DevSecOps workflow for deploying a Dockerized Node.js web app to AWS EC2.
 
-### Tech Stack
-- Node.js - Backend application
-- Jenkins - CI/CD automation
-- Docker - Containerization
-- Docker Hub - Image registry
-- AWS EC2 - Deployment server
-- Checkov - Security scanning
+The project uses:
+- Terraform to provision AWS infrastructure
+- Checkov to scan infrastructure and container configuration
+- Jenkins to automate CI/CD
+- Docker to package the application
+- Ansible to deploy the container to EC2
 
-### Key Features
-- Automated CI/CD pipeline triggered from source control changes
-- Shift-left security scanning with Checkov before build and deployment
-- Docker-based packaging for consistent runtime behavior
-- Continuous deployment to EC2 using Jenkins-managed SSH credentials
-- Secure credential handling through Jenkins credentials instead of hardcoded secrets
-- Clear stage-by-stage visibility in Jenkins logs
+## Architecture
 
-### Pipeline Stages
-1. Checkout Code
-   Pulls the latest code from source control.
-2. Security Scan
-   Runs `checkov -d .` across the repository.
-3. Build Application
-   Runs `npm install` inside `app/`.
-4. Docker Build
-   Builds `happi2307/devsecops-app`.
-5. Docker Login
-   Authenticates to Docker Hub using Jenkins credentials.
-6. Docker Push
-   Pushes the latest image to Docker Hub.
-7. Deploy to EC2
-   Pulls the latest image, replaces the running app container, and starts the new release on port `8080`.
+```text
+GitHub push
+  -> Jenkins pipeline
+  -> Checkov security scan
+  -> Docker build and push
+  -> Ansible deploy
+  -> EC2 app container
+```
 
-### Project Structure
+Terraform is intentionally run manually for this project so AWS infrastructure changes are controlled. Jenkins validates the Terraform code with Checkov on every run, then uses Ansible for repeatable deployment.
+
+## Project Structure
+
 ```text
 CloudSentinel/
 |-- app/                 # Node.js application
-|-- terraform/           # Infrastructure-as-code folder
-|-- Dockerfile           # Docker configuration
+|-- ansible/             # Ansible configuration and deployment playbooks
+|-- terraform/           # AWS infrastructure as code
+|-- Dockerfile           # App container image
 |-- Jenkinsfile          # CI/CD pipeline
-|-- PROJECT.md           # Project summary
-|-- .gitignore
-|-- .dockerignore
+|-- PROJECT.md           # Short project summary
 |-- README.md
 ```
 
-### Setup Instructions
-1. Clone the repository
+## Terraform Usage
 
-   ```bash
-   git clone https://github.com/happi2307/CloudSentinel.git
-   cd CloudSentinel
-   ```
+Terraform provisions the AWS resources used by the project, including the EC2 host, security group, IAM profile, and Elastic IP.
 
-2. Set up Jenkins plugins
-   - Pipeline
-   - Git
-   - Docker Pipeline
-   - SSH Agent
+Run Terraform from your local machine:
 
-3. Configure Jenkins credentials
-   - Docker Hub credentials ID: `docker-creds`
-   - SSH private key credentials ID: `ec2-ssh`
-   - SSH username: `ubuntu`
+```powershell
+cd C:\Users\Akshat\Downloads\CloudSentinel\terraform
+terraform init
+terraform plan -var "key_pair_name=cloud" -var "allowed_ssh_cidr=YOUR_PUBLIC_IP/32"
+terraform apply -var "key_pair_name=cloud" -var "allowed_ssh_cidr=YOUR_PUBLIC_IP/32"
+```
 
-4. Create a Jenkins pipeline job
-   - Use Pipeline from SCM
-   - Point to the GitHub repository
-   - Use the `main` branch
+Use the Terraform output `jenkins_public_ip` as the Jenkins and app host IP.
 
-5. Ensure required tools are installed on the Jenkins agent
-   - Docker
-   - Node.js and npm
-   - Checkov
-   - OpenSSH client
+## Ansible Usage
 
-### Jenkins on EC2
-- The Terraform file in [`terraform/main.tf`](/c:/Users/Akshat/Downloads/CloudSentinel/terraform/main.tf#L1) now provisions a Jenkins-ready Ubuntu EC2 instance with Docker, Java 17, and Jenkins installed automatically.
-- The default instance type is `t3.large`, which is a more practical baseline for a small shared Jenkins controller than lightweight burstable instances.
-- If you host Jenkins and the application on the same EC2 machine, do not leave both on port `8080`. Jenkins uses `8080` by default, so the application should move to another port or sit behind a reverse proxy.
+Ansible configures and deploys the application container.
 
-### How to Use
-1. Make changes inside `app/`.
-2. Commit and push to `main`.
-3. Trigger the Jenkins pipeline manually or through SCM polling/webhooks.
-4. Monitor Jenkins console logs for each stage.
-5. Access the deployed app at `http://<EC2-PUBLIC-IP>:8080`.
+Manual deployment example:
 
-### Best Practices
-- Do not commit `.pem` files or other secrets
-- Do not hardcode credentials in the repository
-- Use Jenkins Credentials Manager for Docker and SSH secrets
-- Keep secret and local runtime files ignored in Git
+```bash
+cd ansible
+cp inventory.ini.example inventory.ini
+ansible-playbook configure-jenkins.yml
+ansible-playbook deploy-app.yml
+```
 
-### Future Improvements
-- Add automated application tests
-- Add monitoring with Prometheus and Grafana
-- Expand deployment to Kubernetes or EKS
-- Add pipeline notifications
+In Jenkins, the inventory is generated dynamically from Jenkins credentials, so the real `ansible/inventory.ini` file is not committed.
+
+## Jenkins Pipeline
+
+The Jenkins pipeline performs:
+
+1. Checkout Code
+2. Security Scan with Checkov
+3. Build App dependencies using a Node Docker image
+4. Docker Build
+5. Docker Push to Docker Hub
+6. Ansible Deploy to EC2
+
+Required Jenkins credentials:
+- `docker-creds`: Docker Hub username and password/token
+- `ec2-ssh`: SSH private key for the EC2 host, username `ubuntu`
+
+Required tools on the Jenkins EC2 host:
+- Docker
+- Git
+- Ansible
+- OpenSSH client
+
+Install Ansible on the Jenkins host:
+
+```bash
+sudo apt update
+sudo apt install -y ansible
+```
+
+## Ports
+
+If Jenkins and the app run on the same EC2 instance:
+- Jenkins UI: `http://<EC2_PUBLIC_IP>:8080`
+- App: `http://<EC2_PUBLIC_IP>:8081`
+
+The app listens on container port `8080`, and Ansible publishes it to host port `8081`.
+
+## GitHub Webhook
+
+To trigger Jenkins automatically on push:
+
+1. In Jenkins job configuration, enable `GitHub hook trigger for GITScm polling`.
+2. In GitHub repository settings, add a webhook:
+
+```text
+http://<EC2_PUBLIC_IP>:8080/github-webhook/
+```
+
+Set content type to `application/json` and choose push events.
+
+## Security Notes
+
+- Do not commit `.pem` files or credentials.
+- Store Docker Hub and SSH credentials in Jenkins Credentials Manager.
+- Restrict SSH ingress to your own IP when possible.
+- Use Checkov to catch insecure Terraform and Docker configuration before deployment.
+- Rotate any private key that was exposed outside your machine.

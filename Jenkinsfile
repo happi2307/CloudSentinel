@@ -61,7 +61,7 @@ pipeline {
             }
         }
 
-        stage('Deploy to EC2') {
+        stage('Ansible Deploy') {
             steps {
                 withCredentials([sshUserPrivateKey(
                     credentialsId: 'ec2-ssh',
@@ -69,16 +69,13 @@ pipeline {
                 )]) {
                     sh '''
                         chmod 600 "$SSH_KEY"
-                        ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$EC2_USER@$EC2_IP" '
-                          set -e
-                          docker pull '"$DOCKER_IMAGE"'
-                          docker rm -f cloudsentinel-app >/dev/null 2>&1 || true
-                          existing_ids=$(docker ps -aq --filter "publish='"$APP_PORT"'")
-                          if [ -n "$existing_ids" ]; then
-                            docker rm -f $existing_ids
-                          fi
-                          docker run -d --name cloudsentinel-app -p '"$APP_PORT"':8080 '"$DOCKER_IMAGE"'
-                        '
+                        cat > ansible/inventory.ini <<EOF
+[app]
+app-host ansible_host=$EC2_IP ansible_user=$EC2_USER ansible_ssh_private_key_file=$SSH_KEY
+EOF
+                        ansible-playbook ansible/deploy-app.yml \
+                          -i ansible/inventory.ini \
+                          --extra-vars "docker_image=$DOCKER_IMAGE app_port=$APP_PORT"
                     '''
                 }
             }
