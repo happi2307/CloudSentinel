@@ -63,21 +63,15 @@ pipeline {
 
         stage('Ansible Deploy') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ec2-ssh',
-                    keyFileVariable: 'SSH_KEY'
-                )]) {
-                    sh '''
-                        chmod 600 "$SSH_KEY"
-                        cat > ansible/inventory.ini <<EOF
+                sh '''
+                    cat > ansible/inventory.ini <<EOF
 [app]
-app-host ansible_host=$EC2_IP ansible_user=$EC2_USER ansible_ssh_private_key_file=$SSH_KEY
+localhost ansible_connection=local
 EOF
-                        ansible-playbook ansible/deploy-app.yml \
-                          -i ansible/inventory.ini \
-                          --extra-vars "docker_image=$DOCKER_IMAGE app_port=$APP_PORT"
-                    '''
-                }
+                    ansible-playbook ansible/deploy-app.yml \
+                      -i ansible/inventory.ini \
+                      --extra-vars "docker_image=$DOCKER_IMAGE app_port=$APP_PORT"
+                '''
             }
         }
     }

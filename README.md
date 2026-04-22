@@ -85,6 +85,7 @@ Required tools on the Jenkins EC2 host:
 - Git
 - Ansible
 - OpenSSH client
+- sudo access for the `jenkins` user when running local Ansible deployment tasks
 
 Install Ansible on the Jenkins host:
 
@@ -92,6 +93,8 @@ Install Ansible on the Jenkins host:
 sudo apt update
 sudo apt install -y ansible
 ```
+
+For same-host deployment, the Jenkins pipeline uses Ansible with `ansible_connection=local`. If your playbook uses `become: true`, allow the `jenkins` user to run the required commands with sudo.
 
 ## Ports
 
